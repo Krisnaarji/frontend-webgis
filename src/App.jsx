@@ -1,10 +1,15 @@
-import React, { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from 'react-leaflet';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { MapContainer, TileLayer, CircleMarker, useMap, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 
-const API_BASE = 'http://100.89.123.21:5000';
+const API_BASE = 'http://IP_DISINI:5000';
 
-// ── Gaya Global ──────────────────────────────────────────────────────────────
+const DENPASAR_BOUNDS = [
+  [-8.80, 115.10], // SW
+  [-8.55, 115.35], // NE
+];
+const DENPASAR_CENTER = [-8.6705, 115.2128];
+
 const STYLES = `
   @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
@@ -36,7 +41,6 @@ const STYLES = `
     overflow: hidden;
   }
 
-  /* ── topbar ── */
   .topbar {
     grid-column: 1 / -1;
     display: flex; align-items: center; gap: 12px;
@@ -45,63 +49,29 @@ const STYLES = `
     border-bottom: 1px solid var(--border);
     z-index: 1000;
   }
-  .topbar-logo {
-    display: flex; align-items: center; gap: 8px;
-    font-size: 15px; font-weight: 700; letter-spacing: 0.02em;
-  }
+  .topbar-logo { display: flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 700; letter-spacing: 0.02em; }
   .topbar-logo .dot {
     width: 8px; height: 8px; border-radius: 50%;
-    background: var(--accent);
-    box-shadow: 0 0 10px var(--accent);
+    background: var(--accent); box-shadow: 0 0 10px var(--accent);
     animation: pulse-dot 2s ease-in-out infinite;
   }
-  .topbar-badge {
-    margin-left: auto;
-    display: flex; align-items: center; gap: 6px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px; color: var(--muted);
-  }
-  .live-dot {
-    width: 6px; height: 6px; border-radius: 50%;
-    background: var(--safe);
-    animation: pulse-dot 1.5s ease-in-out infinite;
-  }
+  .topbar-badge { margin-left: auto; display: flex; align-items: center; gap: 6px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--muted); }
+  .live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--safe); animation: pulse-dot 1.5s ease-in-out infinite; }
 
-  /* ── sidebar ── */
-  .sidebar {
-    background: var(--surface);
-    border-right: 1px solid var(--border);
-    display: flex; flex-direction: column;
-    overflow: hidden;
-    z-index: 100;
-  }
+  .sidebar { background: var(--surface); border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; z-index: 100; }
   .sidebar-section { padding: 16px; border-bottom: 1px solid var(--border); }
-  .section-label {
-    font-size: 10px; font-weight: 600; letter-spacing: 0.12em;
-    text-transform: uppercase; color: var(--muted);
-    margin-bottom: 12px;
-  }
+  .section-label { font-size: 10px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: 12px; }
 
-  /* ── stat cards ── */
   .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .stat-card {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 10px; padding: 12px;
-    transition: border-color 0.2s;
-  }
+  .stat-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 12px; transition: border-color 0.2s; }
   .stat-card:hover { border-color: rgba(255,255,255,0.15); }
   .stat-card.high   { border-left: 3px solid var(--accent); }
   .stat-card.medium { border-left: 3px solid var(--warn); }
-  .stat-num {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 26px; font-weight: 500; line-height: 1; margin-bottom: 4px;
-  }
+  .stat-num { font-family: 'JetBrains Mono', monospace; font-size: 26px; font-weight: 500; line-height: 1; margin-bottom: 4px; }
   .stat-card.high .stat-num   { color: var(--accent); }
   .stat-card.medium .stat-num { color: var(--warn); }
   .stat-label { font-size: 11px; color: var(--muted); }
 
-  /* ── severity bar ── */
   .sev-bar-wrap { margin-top: 4px; }
   .sev-bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
   .sev-bar-label { font-size: 11px; width: 52px; color: var(--muted); }
@@ -109,13 +79,8 @@ const STYLES = `
   .sev-bar-fill { height: 100%; border-radius: 99px; transition: width 0.8s cubic-bezier(.4,0,.2,1); }
   .sev-bar-count { font-family: 'JetBrains Mono', monospace; font-size: 11px; width: 24px; text-align: right; color: var(--muted); }
 
-  /* ── pothole list ── */
   .pothole-list { flex: 1; overflow-y: auto; padding: 8px; }
-  .list-item {
-    display: flex; gap: 10px; align-items: flex-start;
-    padding: 10px; border-radius: 8px;
-    cursor: pointer; transition: background 0.15s; margin-bottom: 2px;
-  }
+  .list-item { display: flex; gap: 10px; align-items: flex-start; padding: 10px; border-radius: 8px; cursor: pointer; transition: background 0.15s; margin-bottom: 2px; }
   .list-item:hover  { background: var(--surface2); }
   .list-item.active { background: var(--surface2); outline: 1px solid var(--border); }
   .list-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
@@ -124,23 +89,83 @@ const STYLES = `
   .list-title { font-size: 12px; font-weight: 500; line-height: 1.4; }
   .list-sub   { font-size: 10px; color: var(--muted); font-family: 'JetBrains Mono', monospace; margin-top: 2px; }
 
-  /* ── map area ── */
   .map-wrap { position: relative; overflow: hidden; }
   .leaflet-container { background: #0d1117 !important; height: 100%; width: 100%; }
 
-  /* ── coords hud ── */
+  .float-card-wrap {
+    position: absolute;
+    z-index: 900;
+    pointer-events: none; 
+    
+  }
+  .float-card {
+    pointer-events: all;
+    width: 250px;
+    background: #111318;
+    border: 1px solid rgba(255,255,255,0.09);
+    border-radius: 14px;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.75);
+    overflow: hidden;
+    animation: popIn 0.18s cubic-bezier(.4,0,.2,1) both;
+    transform: translate(-50%, calc(-100% - 18px));
+  }
+  @keyframes popIn {
+    from { opacity:0; transform: translate(-50%, calc(-100% - 10px)) scale(0.95); }
+    to   { opacity:1; transform: translate(-50%, calc(-100% - 18px)) scale(1); }
+  }
+  .float-card::after {
+    content: '';
+    position: absolute; bottom: -7px; left: 50%;
+    transform: translateX(-50%);
+    border-left: 7px solid transparent;
+    border-right: 7px solid transparent;
+    border-top: 7px solid #111318;
+    filter: drop-shadow(0 2px 2px rgba(0,0,0,0.4));
+  }
+  .fc-inner { padding: 14px; }
+  .fc-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .fc-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .fc-title { font-size: 14px; font-weight: 700; }
+  .fc-time { font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono', monospace; margin-bottom: 10px; }
+  .fc-thumb {
+    width: 100%; aspect-ratio: 4/3; object-fit: cover;
+    display: block; margin-bottom: 10px;
+    border-radius: 8px; border: 1px solid var(--border);
+    cursor: pointer; transition: opacity 0.2s;
+  }
+  .fc-thumb:hover { opacity: 0.85; }
+  .fc-no-img {
+    width: 100%; aspect-ratio: 4/3;
+    background: var(--surface2); border-radius: 8px;
+    border: 1px dashed var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; color: var(--muted); margin-bottom: 10px;
+  }
+  .fc-coords { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--muted); margin-bottom: 10px; line-height: 1.8; }
+  .fc-coords span { color: var(--text); }
+  .fc-actions { display: flex; gap: 6px; }
+  .fc-btn {
+    flex: 1; padding: 8px 6px; border-radius: 8px; border: none;
+    cursor: pointer; font-family: 'Space Grotesk', sans-serif;
+    font-size: 11px; font-weight: 600;
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+    transition: opacity 0.2s, transform 0.15s;
+  }
+  .fc-btn:hover  { opacity: 0.85; transform: translateY(-1px); }
+  .fc-btn:active { transform: translateY(0); }
+  .fc-btn.primary.high   { background: rgba(231,76,60,0.18); color: var(--accent); border: 1px solid rgba(231,76,60,0.35); }
+  .fc-btn.primary.medium { background: rgba(243,156,18,0.15); color: var(--warn);   border: 1px solid rgba(243,156,18,0.3); }
+  .fc-btn.close-btn { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); flex: 0 0 auto; padding: 8px 10px; }
+
   .coords-hud {
     position: absolute; bottom: 14px; right: 14px; z-index: 999;
     background: rgba(10,12,16,0.85); backdrop-filter: blur(8px);
     border: 1px solid var(--border); border-radius: 8px;
-    padding: 8px 12px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 11px; color: var(--muted);
-    pointer-events: none; line-height: 1.6;
+    padding: 8px 12px; font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; color: var(--muted); pointer-events: none; line-height: 1.6;
   }
   .coords-hud span { color: var(--text); }
 
-  /* ── legend hud ── */
   .legend-hud {
     position: absolute; top: 14px; right: 14px; z-index: 999;
     background: rgba(10,12,16,0.85); backdrop-filter: blur(8px);
@@ -151,226 +176,54 @@ const STYLES = `
   .legend-row { display: flex; align-items: center; gap: 8px; }
   .legend-circle { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 
-  /* ── popup custom ── */
-  .leaflet-popup-content-wrapper {
-    background: #111318 !important;
-    border: 1px solid rgba(255,255,255,0.09) !important;
-    border-radius: 12px !important;
-    box-shadow: 0 12px 40px rgba(0,0,0,0.7) !important;
-    color: #e8eaf0 !important;
-    font-family: 'Space Grotesk', sans-serif !important;
-    padding: 0 !important;
-    overflow: hidden !important;
-  }
-  .leaflet-popup-tip-container { display: none; }
-  .leaflet-popup-content { margin: 0 !important; }
-  .leaflet-popup-close-button {
-    color: #6b7280 !important;
-    font-size: 16px !important;
-    padding: 8px 10px !important;
-    top: 4px !important; right: 4px !important;
-  }
-  .leaflet-popup-close-button:hover { color: #e8eaf0 !important; }
-
-  /* ── popup inner ── */
-  .popup-inner {
-    width: 240px;
-    padding: 16px;
-  }
-  .popup-header {
-    display: flex; align-items: center; gap: 8px;
-    margin-bottom: 10px;
-  }
-  .popup-sev-dot {
-    width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
-  }
-  .popup-title {
-    font-size: 14px; font-weight: 700;
-  }
-  .popup-time {
-    font-size: 11px; color: var(--muted);
-    font-family: 'JetBrains Mono', monospace;
-    margin-bottom: 10px;
-  }
-  .popup-thumb {
-    width: 100%; aspect-ratio: 4/3;
-    object-fit: cover;
-    border-radius: 8px;
-    border: 1px solid var(--border);
-    display: block;
-    margin-bottom: 12px;
-    cursor: pointer;
-    transition: opacity 0.2s;
-  }
-  .popup-thumb:hover { opacity: 0.85; }
-  .popup-no-img {
-    width: 100%; aspect-ratio: 4/3;
-    background: var(--surface2);
-    border-radius: 8px; border: 1px dashed var(--border);
-    display: flex; align-items: center; justify-content: center;
-    margin-bottom: 12px;
-    font-size: 11px; color: var(--muted);
-  }
-  .popup-coords {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px; color: var(--muted);
-    margin-bottom: 12px;
-    line-height: 1.8;
-  }
-  .popup-coords span { color: var(--text); }
-  .popup-cta {
-    width: 100%;
-    padding: 9px;
-    border-radius: 8px;
-    border: none;
-    cursor: pointer;
-    font-family: 'Space Grotesk', sans-serif;
-    font-size: 12px; font-weight: 600;
-    display: flex; align-items: center; justify-content: center; gap: 6px;
-    transition: opacity 0.2s, transform 0.15s;
-  }
-  .popup-cta:hover { opacity: 0.88; transform: translateY(-1px); }
-  .popup-cta:active { transform: translateY(0); }
-  .popup-cta.high   { background: rgba(231,76,60,0.18); color: var(--accent); border: 1px solid rgba(231,76,60,0.35); }
-  .popup-cta.medium { background: rgba(243,156,18,0.15); color: var(--warn);   border: 1px solid rgba(243,156,18,0.3); }
-
-  /* ── drawer overlay ── */
+  /* Drawer */
   .drawer-overlay {
     position: fixed; inset: 0; z-index: 1100;
-    background: rgba(0,0,0,0);
-    pointer-events: none;
+    background: rgba(0,0,0,0); pointer-events: none;
     transition: background 0.35s;
   }
-  .drawer-overlay.open {
-    background: rgba(0,0,0,0.5);
-    pointer-events: all;
-  }
-
-  /* ── drawer panel ── */
+  .drawer-overlay.open { background: rgba(0,0,0,0.5); pointer-events: all; }
   .drawer {
     position: absolute; top: 0; right: 0;
     width: 380px; height: 100%;
-    background: var(--surface);
-    border-left: 1px solid var(--border);
+    background: var(--surface); border-left: 1px solid var(--border);
     transform: translateX(100%);
     transition: transform 0.38s cubic-bezier(.4,0,.2,1);
-    display: flex; flex-direction: column;
-    overflow: hidden;
+    display: flex; flex-direction: column; overflow: hidden;
     pointer-events: all;
   }
   .drawer.open { transform: translateX(0); }
-
-  .drawer-topbar {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 16px 20px;
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-  }
-  .drawer-topbar-title {
-    font-size: 13px; font-weight: 700; letter-spacing: 0.02em;
-  }
-  .drawer-close {
-    width: 28px; height: 28px; border-radius: 8px;
-    background: var(--surface2); border: 1px solid var(--border);
-    color: var(--muted); font-size: 13px;
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer; transition: color 0.15s, border-color 0.15s;
-  }
+  .drawer-topbar { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .drawer-topbar-title { font-size: 13px; font-weight: 700; letter-spacing: 0.02em; }
+  .drawer-close { width: 28px; height: 28px; border-radius: 8px; background: var(--surface2); border: 1px solid var(--border); color: var(--muted); font-size: 13px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: color 0.15s, border-color 0.15s; }
   .drawer-close:hover { color: var(--text); border-color: rgba(255,255,255,0.18); }
-
   .drawer-body { flex: 1; overflow-y: auto; padding: 20px; }
-
-  /* ── drawer photo ── */
-  .drawer-photo-wrap {
-    position: relative;
-    border-radius: 12px; overflow: hidden;
-    border: 1px solid var(--border);
-    margin-bottom: 20px;
-    background: var(--surface2);
-  }
-  .drawer-photo-wrap img {
-    width: 100%; display: block;
-    aspect-ratio: 16/10; object-fit: cover;
-  }
-  .drawer-photo-badge {
-    position: absolute; bottom: 10px; left: 10px;
-    display: inline-flex; align-items: center; gap: 6px;
-    padding: 4px 10px; border-radius: 99px;
-    font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
-    backdrop-filter: blur(8px);
-  }
+  .drawer-photo-wrap { position: relative; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); margin-bottom: 20px; background: var(--surface2); }
+  .drawer-photo-wrap img { width: 100%; display: block; aspect-ratio: 16/10; object-fit: cover; }
+  .drawer-photo-badge { position: absolute; bottom: 10px; left: 10px; display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 99px; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; backdrop-filter: blur(8px); }
   .drawer-photo-badge.high   { background: rgba(231,76,60,0.75); color: #fff; }
   .drawer-photo-badge.medium { background: rgba(243,156,18,0.75); color: #fff; }
-  .drawer-no-photo {
-    aspect-ratio: 16/10;
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center; gap: 8px;
-    color: var(--muted); font-size: 12px;
-  }
+  .drawer-no-photo { aspect-ratio: 16/10; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--muted); font-size: 12px; }
   .drawer-no-photo-icon { font-size: 32px; opacity: 0.25; }
-
-  /* ── drawer info blocks ── */
   .drawer-section { margin-bottom: 20px; }
-  .drawer-section-title {
-    font-size: 10px; font-weight: 600; letter-spacing: 0.12em;
-    text-transform: uppercase; color: var(--muted);
-    margin-bottom: 10px;
-  }
-  .drawer-info-grid {
-    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
-  }
-  .drawer-info-cell {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 10px; padding: 12px;
-  }
+  .drawer-section-title { font-size: 10px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+  .drawer-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .drawer-info-cell { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
   .drawer-info-label { font-size: 10px; color: var(--muted); margin-bottom: 4px; }
-  .drawer-info-val {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 13px; font-weight: 500;
-  }
+  .drawer-info-val { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 500; }
   .drawer-info-cell.full { grid-column: 1 / -1; }
-
-  /* ── drawer map mini ── */
-  .drawer-map-link {
-    display: flex; align-items: center; justify-content: center; gap: 8px;
-    width: 100%; padding: 11px;
-    border-radius: 10px;
-    background: var(--surface2); border: 1px solid var(--border);
-    color: var(--muted); font-size: 12px;
-    text-decoration: none; cursor: pointer;
-    transition: border-color 0.2s, color 0.2s;
-    margin-top: 4px;
-  }
+  .drawer-map-link { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 11px; border-radius: 10px; background: var(--surface2); border: 1px solid var(--border); color: var(--muted); font-size: 12px; text-decoration: none; cursor: pointer; transition: border-color 0.2s, color 0.2s; margin-top: 4px; }
   .drawer-map-link:hover { border-color: rgba(255,255,255,0.18); color: var(--text); }
-
-  /* ── sev chip ── */
-  .sev-chip {
-    display: inline-flex; align-items: center; gap: 6px;
-    font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
-    padding: 4px 10px; border-radius: 99px;
-  }
+  .sev-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; padding: 4px 10px; border-radius: 99px; }
   .sev-chip.high   { background: rgba(231,76,60,0.15);  color: var(--accent); border: 1px solid rgba(231,76,60,0.3); }
   .sev-chip.medium { background: rgba(243,156,18,0.12); color: var(--warn);   border: 1px solid rgba(243,156,18,0.25); }
 
-  /* ── empty ── */
-  .empty {
-    display: flex; flex-direction: column; align-items: center;
-    justify-content: center; flex: 1; gap: 8px;
-    color: var(--muted); text-align: center; padding: 20px;
-  }
+  .empty { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; gap: 8px; color: var(--muted); text-align: center; padding: 20px; }
   .empty-icon { font-size: 28px; opacity: 0.3; }
   .empty-text { font-size: 12px; line-height: 1.6; }
 
-  /* ── animations ── */
-  @keyframes pulse-dot {
-    0%,100% { opacity:1; transform:scale(1); }
-    50%      { opacity:0.5; transform:scale(1.4); }
-  }
-  @keyframes fadein {
-    from { opacity:0; transform:translateY(6px); }
-    to   { opacity:1; transform:translateY(0); }
-  }
+  @keyframes pulse-dot { 0%,100%{opacity:1;transform:scale(1);}50%{opacity:0.5;transform:scale(1.4);} }
+  @keyframes fadein { from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);} }
   .fadein { animation: fadein 0.4s ease both; }
 `;
 
@@ -385,75 +238,72 @@ function FlyTo({ target }) {
   return null;
 }
 
-function MouseCoords({ setCoords }) {
-  const map = useMap();
-  useEffect(() => {
-    const h = (e) => setCoords({ lat: e.latlng.lat.toFixed(5), lng: e.latlng.lng.toFixed(5) });
-    map.on('mousemove', h);
-    return () => map.off('mousemove', h);
-  }, [map, setCoords]);
+function MapEventTracker({ setCoords, onMapMove }) {
+  useMapEvents({
+    mousemove(e)  { setCoords({ lat: e.latlng.lat.toFixed(5), lng: e.latlng.lng.toFixed(5) }); },
+    move()        { onMapMove(); },
+    zoom()        { onMapMove(); },
+  });
   return null;
 }
 
-// ── Popup content rendered as plain React (not inside Leaflet DOM) ─────────
-function PopupContent({ pothole, onViewDetail }) {
+function FloatingCard({ pothole, pixelPos, onClose, onViewDetail }) {
+  if (!pothole || !pixelPos) return null;
   const isHigh = pothole.severity === 'High';
   const color  = isHigh ? '#e74c3c' : '#f39c12';
   const cls    = isHigh ? 'high' : 'medium';
 
   return (
-    <div className="popup-inner">
-      <div className="popup-header">
-        <div className="popup-sev-dot" style={{ background: color, boxShadow: `0 0 8px ${color}` }} />
-        <div className="popup-title" style={{ color }}>
-          Keparahan {isHigh ? 'Tinggi' : 'Sedang'}
+    <div
+      className="float-card-wrap"
+      style={{ left: pixelPos.x, top: pixelPos.y }}
+    >
+      <div className="float-card">
+        <div className="fc-inner">
+          <div className="fc-header">
+            <div className="fc-dot" style={{ background: color, boxShadow: `0 0 8px ${color}` }} />
+            <div className="fc-title" style={{ color }}>
+              Keparahan {isHigh ? 'Tinggi' : 'Sedang'}
+            </div>
+          </div>
+          <div className="fc-time">
+            {new Date(pothole.created_at).toLocaleString('id-ID')}
+          </div>
+          {pothole.image_name ? (
+            <img
+              className="fc-thumb"
+              src={`${API_BASE}/uploads/${pothole.image_name}`}
+              alt="Bukti"
+              onClick={onViewDetail}
+              title="Klik untuk lihat detail"
+            />
+          ) : (
+            <div className="fc-no-img">Tidak ada foto</div>
+          )}
+          <div className="fc-coords">
+            LAT &nbsp;<span>{Number(pothole.lat).toFixed(6)}</span><br />
+            LNG &nbsp;<span>{Number(pothole.lng).toFixed(6)}</span>
+          </div>
+          <div className="fc-actions">
+            <button className={`fc-btn primary ${cls}`} onClick={onViewDetail}>
+              ↗ Lihat Detail
+            </button>
+            <button className="fc-btn close-btn" onClick={onClose}>✕</button>
+          </div>
         </div>
       </div>
-
-      <div className="popup-time">
-        {new Date(pothole.created_at).toLocaleString('id-ID')}
-      </div>
-
-      {pothole.image_name ? (
-        <img
-          className="popup-thumb"
-          src={`${API_BASE}/uploads/${pothole.image_name}`}
-          alt="Bukti jalan rusak"
-          onClick={onViewDetail}
-          title="Klik untuk lihat detail"
-        />
-      ) : (
-        <div className="popup-no-img">Tidak ada foto</div>
-      )}
-
-      <div className="popup-coords">
-        LAT &nbsp;<span>{Number(pothole.lat).toFixed(6)}</span><br />
-        LNG &nbsp;<span>{Number(pothole.lng).toFixed(6)}</span>
-      </div>
-
-      <button className={`popup-cta ${cls}`} onClick={onViewDetail}>
-        <span>↗</span> Lihat Detail Lengkap
-      </button>
     </div>
   );
 }
 
-// ── Detail Drawer ──────────────────────────────────────────────────────────
 function DetailDrawer({ pothole, onClose }) {
-  const open  = !!pothole;
+  const open   = !!pothole;
   const isHigh = pothole?.severity === 'High';
   const cls    = isHigh ? 'high' : 'medium';
   const color  = isHigh ? '#e74c3c' : '#f39c12';
-
-  const googleMapsUrl = pothole
-    ? `https://www.google.com/maps?q=${pothole.lat},${pothole.lng}`
-    : '#';
-
+  const googleMapsUrl = pothole ? `https://www.google.com/maps?q=${pothole.lat},${pothole.lng}` : '#';
   const formatFull = (iso) =>
-    new Date(iso).toLocaleString('id-ID', {
-      weekday: 'long', day: '2-digit', month: 'long',
-      year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit'
-    });
+    new Date(iso).toLocaleString('id-ID', { weekday:'long', day:'2-digit', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit', second:'2-digit' });
 
   return (
     <div className={`drawer-overlay ${open ? 'open' : ''}`} onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -469,18 +319,12 @@ function DetailDrawer({ pothole, onClose }) {
               </div>
               <button className="drawer-close" onClick={onClose}>✕</button>
             </div>
-
             <div className="drawer-body">
-
-              {/* Photo */}
               <div className="drawer-section">
                 <div className="drawer-photo-wrap">
                   {pothole.image_name ? (
                     <>
-                      <img
-                        src={`${API_BASE}/uploads/${pothole.image_name}`}
-                        alt="Bukti jalan rusak"
-                      />
+                      <img src={`${API_BASE}/uploads/${pothole.image_name}`} alt="Bukti jalan rusak" />
                       <div className={`drawer-photo-badge ${cls}`}>
                         <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#fff' }} />
                         {isHigh ? 'Keparahan Tinggi' : 'Keparahan Sedang'}
@@ -495,7 +339,6 @@ function DetailDrawer({ pothole, onClose }) {
                 </div>
               </div>
 
-              {/* Status */}
               <div className="drawer-section">
                 <div className="drawer-section-title">Status</div>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -509,20 +352,16 @@ function DetailDrawer({ pothole, onClose }) {
                 </div>
               </div>
 
-              {/* Waktu */}
               <div className="drawer-section">
                 <div className="drawer-section-title">Waktu Deteksi</div>
                 <div className="drawer-info-grid">
                   <div className="drawer-info-cell full">
                     <div className="drawer-info-label">Tanggal & Waktu Lengkap</div>
-                    <div className="drawer-info-val" style={{ fontSize: 11, lineHeight: 1.6 }}>
-                      {formatFull(pothole.created_at)}
-                    </div>
+                    <div className="drawer-info-val" style={{ fontSize: 11, lineHeight: 1.6 }}>{formatFull(pothole.created_at)}</div>
                   </div>
                 </div>
               </div>
 
-              {/* Koordinat */}
               <div className="drawer-section">
                 <div className="drawer-section-title">Koordinat</div>
                 <div className="drawer-info-grid">
@@ -541,18 +380,11 @@ function DetailDrawer({ pothole, onClose }) {
                     </div>
                   </div>
                 </div>
-
-                <a
-                  className="drawer-map-link"
-                  href={googleMapsUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
+                <a className="drawer-map-link" href={googleMapsUrl} target="_blank" rel="noopener noreferrer">
                   <span>🗺</span> Buka di Google Maps
                 </a>
               </div>
 
-              {/* Info tambahan */}
               <div className="drawer-section">
                 <div className="drawer-section-title">Info Laporan</div>
                 <div className="drawer-info-grid">
@@ -569,14 +401,11 @@ function DetailDrawer({ pothole, onClose }) {
                   {pothole.image_name && (
                     <div className="drawer-info-cell full">
                       <div className="drawer-info-label">Nama File</div>
-                      <div className="drawer-info-val" style={{ fontSize: 11, wordBreak: 'break-all' }}>
-                        {pothole.image_name}
-                      </div>
+                      <div className="drawer-info-val" style={{ fontSize: 11, wordBreak: 'break-all' }}>{pothole.image_name}</div>
                     </div>
                   )}
                 </div>
               </div>
-
             </div>
           </>
         )}
@@ -585,15 +414,19 @@ function DetailDrawer({ pothole, onClose }) {
   );
 }
 
-// ── App ────────────────────────────────────────────────────────────────────
 export default function App() {
   const [potholes, setPotholes]     = useState([]);
   const [loading, setLoading]       = useState(true);
-  const [selected, setSelected]     = useState(null);   // for sidebar highlight
-  const [drawerItem, setDrawerItem] = useState(null);   // for right drawer
+  const [selected, setSelected]     = useState(null);
+  const [drawerItem, setDrawerItem] = useState(null);
   const [flyTarget, setFlyTarget]   = useState(null);
   const [coords, setCoords]         = useState({ lat: '-', lng: '-' });
   const [now, setNow]               = useState(new Date());
+
+  const [activeMarker, setActiveMarker] = useState(null); // { pothole, latlng }
+  const [cardPixel, setCardPixel]       = useState(null); // { x, y }
+  const mapRef = useRef(null);
+  const mapWrapRef = useRef(null);
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
@@ -607,18 +440,43 @@ export default function App() {
       .catch(e => { console.error(e); setLoading(false); });
   }, []);
 
+  const recomputeCardPixel = useCallback(() => {
+    if (!activeMarker || !mapRef.current || !mapWrapRef.current) return;
+    const map    = mapRef.current;
+    const wrap   = mapWrapRef.current;
+    const point  = map.latLngToContainerPoint(activeMarker.latlng);
+    const rect   = wrap.getBoundingClientRect();
+    setCardPixel({ x: point.x, y: point.y });
+  }, [activeMarker]);
+
+  useEffect(() => {
+    recomputeCardPixel();
+  }, [recomputeCardPixel]);
+
+  const handleMarkerClick = (p) => {
+    setSelected(p);
+    const latlng = { lat: p.lat, lng: p.lng };
+    setActiveMarker({ pothole: p, latlng });
+    if (mapRef.current) {
+      const point = mapRef.current.latLngToContainerPoint(latlng);
+      setCardPixel({ x: point.x, y: point.y });
+    }
+  };
+
+  const closeCard = () => {
+    setActiveMarker(null);
+    setCardPixel(null);
+  };
+
+  const handleSidebarSelect = (p) => {
+    setSelected(p);
+    setFlyTarget([p.lat, p.lng]);
+    closeCard();
+  };
+
   const highCount = potholes.filter(p => p.severity === 'High').length;
   const medCount  = potholes.filter(p => p.severity !== 'High').length;
   const total     = potholes.length;
-
-  const handleSelect = (p) => {
-    setSelected(p);
-    setFlyTarget([p.lat, p.lng]);
-  };
-
-  const handleViewDetail = (p) => {
-    setDrawerItem(p);
-  };
 
   const formatTime = (iso) =>
     new Date(iso).toLocaleString('id-ID', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -661,7 +519,6 @@ export default function App() {
               </div>
             </div>
           </div>
-
           <div className="sidebar-section">
             <div className="section-label">Distribusi</div>
             <div className="sev-bar-wrap">
@@ -681,30 +538,18 @@ export default function App() {
               </div>
             </div>
           </div>
-
           <div className="sidebar-section" style={{ paddingBottom: 8 }}>
             <div className="section-label">Daftar Kejadian</div>
           </div>
-
           <div className="pothole-list">
-            {loading && (
-              <div className="empty">
-                <div className="empty-icon">⟳</div>
-                <div className="empty-text">Memuat data...</div>
-              </div>
-            )}
-            {!loading && potholes.length === 0 && (
-              <div className="empty">
-                <div className="empty-icon">✓</div>
-                <div className="empty-text">Tidak ada data.<br/>Coba periksa koneksi backend.</div>
-              </div>
-            )}
+            {loading && <div className="empty"><div className="empty-icon">⟳</div><div className="empty-text">Memuat data...</div></div>}
+            {!loading && potholes.length === 0 && <div className="empty"><div className="empty-icon">✓</div><div className="empty-text">Tidak ada data.<br/>Coba periksa koneksi backend.</div></div>}
             {potholes.map((p, i) => (
               <div
                 key={p.id}
                 className={`list-item fadein ${selected?.id === p.id ? 'active' : ''}`}
                 style={{ animationDelay: `${i * 30}ms` }}
-                onClick={() => handleSelect(p)}
+                onClick={() => handleSidebarSelect(p)}
               >
                 <div className={`list-dot ${p.severity === 'High' ? 'high' : 'medium'}`} />
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -715,33 +560,31 @@ export default function App() {
                   </div>
                 </div>
                 <button
-                  style={{
-                    flexShrink: 0, alignSelf: 'center',
-                    background: 'var(--surface2)', border: '1px solid var(--border)',
-                    color: 'var(--muted)', borderRadius: 6, padding: '4px 7px',
-                    fontSize: 10, cursor: 'pointer', transition: 'color 0.15s',
-                  }}
-                  onClick={(e) => { e.stopPropagation(); handleSelect(p); handleViewDetail(p); }}
+                  style={{ flexShrink:0, alignSelf:'center', background:'var(--surface2)', border:'1px solid var(--border)', color:'var(--muted)', borderRadius:6, padding:'4px 7px', fontSize:10, cursor:'pointer' }}
+                  onClick={(e) => { e.stopPropagation(); handleSidebarSelect(p); setDrawerItem(p); }}
                   title="Lihat detail"
-                >
-                  ↗
-                </button>
+                >↗</button>
               </div>
             ))}
           </div>
         </aside>
 
         {/* Map */}
-        <div className="map-wrap">
+        <div className="map-wrap" ref={mapWrapRef}>
           <MapContainer
-            center={[-8.6705, 115.2128]}
+            center={DENPASAR_CENTER}
             zoom={13}
+            minZoom={12}
+            maxZoom={18}
+            maxBounds={DENPASAR_BOUNDS}
+            maxBoundsViscosity={1.0}
             style={{ height: '100%', width: '100%' }}
             zoomControl={false}
+            ref={mapRef}
           >
             <TileLayer attribution={TILE_ATTR} url={DARK_TILE} />
             <FlyTo target={flyTarget} />
-            <MouseCoords setCoords={setCoords} />
+            <MapEventTracker setCoords={setCoords} onMapMove={recomputeCardPixel} />
 
             {potholes.map(p => {
               const isHigh = p.severity === 'High';
@@ -752,18 +595,27 @@ export default function App() {
                   center={[p.lat, p.lng]}
                   radius={isHigh ? 11 : 8}
                   pathOptions={{ color, fillColor: color, fillOpacity: 0.7, weight: 2 }}
-                  eventHandlers={{ click: () => handleSelect(p) }}
-                >
-                  <Popup maxWidth={260} minWidth={240}>
-                    <PopupContent
-                      pothole={p}
-                      onViewDetail={() => handleViewDetail(p)}
-                    />
-                  </Popup>
-                </CircleMarker>
+                  eventHandlers={{
+                    click(e) {
+                      const map   = mapRef.current;
+                      const point = map.latLngToContainerPoint([p.lat, p.lng]);
+                      setSelected(p);
+                      setActiveMarker({ pothole: p, latlng: { lat: p.lat, lng: p.lng } });
+                      setCardPixel({ x: point.x, y: point.y });
+                    }
+                  }}
+                />
               );
             })}
           </MapContainer>
+
+          {/* Floating popup card */}
+          <FloatingCard
+            pothole={activeMarker?.pothole}
+            pixelPos={cardPixel}
+            onClose={closeCard}
+            onViewDetail={() => { setDrawerItem(activeMarker.pothole); closeCard(); }}
+          />
 
           {/* Legend */}
           <div className="legend-hud">
@@ -786,7 +638,6 @@ export default function App() {
 
       </div>
 
-      {/* Right Drawer (portal-like, outside grid) */}
       <DetailDrawer pothole={drawerItem} onClose={() => setDrawerItem(null)} />
     </>
   );

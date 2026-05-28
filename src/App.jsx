@@ -1,13 +1,75 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { MapContainer, TileLayer, CircleMarker, useMap, useMapEvents } from 'react-leaflet';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import { MapContainer, TileLayer, CircleMarker, useMap, useMapEvents, GeoJSON } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 
-const API_BASE = 'http://IP_DISINI:5000';
+const API_BASE = 'http://100.89.123.21:5000';
 
 const DENPASAR_BOUNDS = [
   [-8.80, 115.10], // SW
   [-8.55, 115.35], // NE
 ];
+
+const DENPASAR_GEOJSON = {
+  type: "FeatureCollection",
+  features: [
+    {
+      type: "Feature",
+      properties: { name: "Denpasar Utara" },
+      geometry: {
+        type: "Polygon",
+        coordinates: [[
+          [115.1950, -8.6200], [115.2100, -8.6050], [115.2280, -8.5980],
+          [115.2450, -8.5990], [115.2580, -8.6080], [115.2630, -8.6220],
+          [115.2580, -8.6350], [115.2450, -8.6420], [115.2280, -8.6450],
+          [115.2100, -8.6430], [115.1980, -8.6370], [115.1920, -8.6280],
+          [115.1950, -8.6200]
+        ]]
+      }
+    },
+    {
+      type: "Feature",
+      properties: { name: "Denpasar Barat" },
+      geometry: {
+        type: "Polygon",
+        coordinates: [[
+          [115.1920, -8.6280], [115.1980, -8.6370], [115.2100, -8.6430],
+          [115.2100, -8.6600], [115.2000, -8.6720], [115.1880, -8.6780],
+          [115.1720, -8.6760], [115.1600, -8.6680], [115.1560, -8.6540],
+          [115.1600, -8.6400], [115.1720, -8.6300], [115.1840, -8.6240],
+          [115.1920, -8.6280]
+        ]]
+      }
+    },
+    {
+      type: "Feature",
+      properties: { name: "Denpasar Selatan" },
+      geometry: {
+        type: "Polygon",
+        coordinates: [[
+          [115.2000, -8.6720], [115.2100, -8.6600], [115.2100, -8.6430],
+          [115.2280, -8.6450], [115.2420, -8.6500], [115.2520, -8.6600],
+          [115.2540, -8.6760], [115.2460, -8.6920], [115.2300, -8.7050],
+          [115.2100, -8.7080], [115.1950, -8.7000], [115.1860, -8.6880],
+          [115.1880, -8.6780], [115.2000, -8.6720]
+        ]]
+      }
+    },
+    {
+      type: "Feature",
+      properties: { name: "Denpasar Timur" },
+      geometry: {
+        type: "Polygon",
+        coordinates: [[
+          [115.2280, -8.6450], [115.2450, -8.6420], [115.2580, -8.6350],
+          [115.2630, -8.6220], [115.2720, -8.6200], [115.2850, -8.6280],
+          [115.2900, -8.6450], [115.2850, -8.6620], [115.2720, -8.6750],
+          [115.2580, -8.6800], [115.2540, -8.6760], [115.2520, -8.6600],
+          [115.2420, -8.6500], [115.2280, -8.6450]
+        ]]
+      }
+    }
+  ]
+};
 const DENPASAR_CENTER = [-8.6705, 115.2128];
 
 const STYLES = `
@@ -96,7 +158,6 @@ const STYLES = `
     position: absolute;
     z-index: 900;
     pointer-events: none; 
-    
   }
   .float-card {
     pointer-events: all;
@@ -107,12 +168,14 @@ const STYLES = `
     box-shadow: 0 16px 48px rgba(0,0,0,0.75);
     overflow: hidden;
     animation: popIn 0.18s cubic-bezier(.4,0,.2,1) both;
+    /* offset so card appears above marker */
     transform: translate(-50%, calc(-100% - 18px));
   }
   @keyframes popIn {
     from { opacity:0; transform: translate(-50%, calc(-100% - 10px)) scale(0.95); }
     to   { opacity:1; transform: translate(-50%, calc(-100% - 18px)) scale(1); }
   }
+
   .float-card::after {
     content: '';
     position: absolute; bottom: -7px; left: 50%;
@@ -176,7 +239,6 @@ const STYLES = `
   .legend-row { display: flex; align-items: center; gap: 8px; }
   .legend-circle { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 
-  /* Drawer */
   .drawer-overlay {
     position: fixed; inset: 0; z-index: 1100;
     background: rgba(0,0,0,0); pointer-events: none;
@@ -225,6 +287,23 @@ const STYLES = `
   @keyframes pulse-dot { 0%,100%{opacity:1;transform:scale(1);}50%{opacity:0.5;transform:scale(1.4);} }
   @keyframes fadein { from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);} }
   .fadein { animation: fadein 0.4s ease both; }
+
+  .kec-tooltip {
+    background: rgba(10,12,16,0.88) !important;
+    backdrop-filter: blur(8px);
+    border: 1px solid rgba(255,255,255,0.1) !important;
+    border-radius: 8px !important;
+    color: #e8eaf0 !important;
+    font-family: 'Space Grotesk', sans-serif !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    padding: 5px 10px !important;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.5) !important;
+    white-space: nowrap;
+  }
+  .kec-tooltip::before { display: none !important; }
+  .legend-kec-row { display: flex; align-items: center; gap: 8px; margin-top: 3px; }
+  .legend-kec-dash { width: 16px; height: 0; border-top: 2px dashed currentColor; }
 `;
 
 const DARK_TILE = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
@@ -414,6 +493,37 @@ function DetailDrawer({ pothole, onClose }) {
   );
 }
 
+const KECAMATAN_COLORS = {
+  'Denpasar Utara':   '#818cf8',
+  'Denpasar Barat':   '#22d3ee',
+  'Denpasar Selatan': '#34d399',
+  'Denpasar Timur':   '#fbbf24',
+};
+
+function geoStyle(feature) {
+  const color = KECAMATAN_COLORS[feature.properties.name] || '#ffffff';
+  return {
+    color,
+    weight: 2,
+    opacity: 0.85,
+    fillColor: color,
+    fillOpacity: 0.07,
+    dashArray: '7 5',
+  };
+}
+
+function onEachFeature(feature, layer) {
+  layer.bindTooltip(feature.properties.name, {
+    permanent: false,
+    direction: 'center',
+    className: 'kec-tooltip',
+  });
+  layer.on({
+    mouseover(e) { e.target.setStyle({ fillOpacity: 0.18, weight: 3 }); },
+    mouseout(e)  { e.target.setStyle({ fillOpacity: 0.07, weight: 2 }); },
+  });
+}
+
 export default function App() {
   const [potholes, setPotholes]     = useState([]);
   const [loading, setLoading]       = useState(true);
@@ -583,6 +693,7 @@ export default function App() {
             ref={mapRef}
           >
             <TileLayer attribution={TILE_ATTR} url={DARK_TILE} />
+            <GeoJSON data={DENPASAR_GEOJSON} style={geoStyle} onEachFeature={onEachFeature} />
             <FlyTo target={flyTarget} />
             <MapEventTracker setCoords={setCoords} onMapMove={recomputeCardPixel} />
 
@@ -609,7 +720,6 @@ export default function App() {
             })}
           </MapContainer>
 
-          {/* Floating popup card */}
           <FloatingCard
             pothole={activeMarker?.pothole}
             pixelPos={cardPixel}
@@ -628,6 +738,14 @@ export default function App() {
               <div className="legend-circle" style={{ background: '#f39c12', boxShadow: '0 0 6px #f39c12' }} />
               <span style={{ fontSize: 11 }}>Keparahan Sedang</span>
             </div>
+            <div style={{ borderTop: '1px solid rgba(255,255,255,0.07)', margin: '8px 0 6px' }} />
+            <div style={{ fontSize: 10, fontWeight: 600, letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--muted)', marginBottom: 5 }}>Kecamatan</div>
+            {Object.entries(KECAMATAN_COLORS).map(([name, color]) => (
+              <div key={name} className="legend-kec-row">
+                <div className="legend-kec-dash" style={{ color }} />
+                <span style={{ fontSize: 10.5 }}>{name.replace('Denpasar ', '')}</span>
+              </div>
+            ))}
           </div>
 
           {/* Coords HUD */}

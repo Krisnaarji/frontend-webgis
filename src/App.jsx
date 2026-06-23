@@ -701,7 +701,7 @@ export default function App() {
             <div className="legend-title">Legenda</div>
             <div className="legend-row">
               <div className="legend-circle" style={{ background: '#e74c3c', boxShadow: '0 0 6px #e74c3c' }} />
-              <span style={{ fontSize: 11 }}>Keparahan Tinggi</span>
+              <span style={{ fontSize: 12 }}>Keparahan Tinggi</span>
             </div>
             <div className="legend-row">
               <div className="legend-circle" style={{ background: '#f39c12', boxShadow: '0 0 6px #f39c12' }} />

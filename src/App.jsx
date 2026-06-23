@@ -256,6 +256,14 @@ function FlyTo({ target }) {
   return null;
 }
 
+function MarkerClickHandler({ onMarkerClick }) {
+  const map = useMap();
+  useEffect(() => {
+    window.__leafletMap = map;
+  }, [map]);
+  return null;
+}
+
 function MapEventTracker({ setCoords, onMapMove }) {
   useMapEvents({
     mousemove(e)  { setCoords({ lat: e.latlng.lat.toFixed(5), lng: e.latlng.lng.toFixed(5) }); },
@@ -519,14 +527,13 @@ export default function App() {
   }, [recomputeCardPixel]);
 
   const handleMarkerClick = (p) => {
+    const map = window.__leafletMap;
+    if (!map) return;
     setSelected(p);
     const latlng = { lat: p.lat, lng: p.lng };
     setActiveMarker({ pothole: p, latlng });
-
-    if (mapRef.current) {
-      const point = mapRef.current.latLngToContainerPoint(latlng);
-      setCardPixel({ x: point.x, y: point.y });
-    }
+    const point = map.latLngToContainerPoint(latlng);
+    setCardPixel({ x: point.x, y: point.y });
   };
 
   const closeCard = () => {
@@ -638,6 +645,7 @@ export default function App() {
         {/* Map */}
         <div className="map-wrap" ref={mapWrapRef}>
           <MapContainer
+          
             center={DENPASAR_CENTER}
             zoom={13}
             minZoom={12}
@@ -657,7 +665,7 @@ export default function App() {
                  style={geoStyle} 
                />
             )}
-
+            <MarkerClickHandler />
             <FlyTo target={flyTarget} />
             <MapEventTracker setCoords={setCoords} onMapMove={recomputeCardPixel} />
 
@@ -671,13 +679,8 @@ export default function App() {
                   radius={isHigh ? 11 : 8}
                   pathOptions={{ color, fillColor: color, fillOpacity: 0.7, weight: 2 }}
                   eventHandlers={{
-                    click(e) {
-
-                      const map   = mapRef.current;
-                      const point = map.latLngToContainerPoint([p.lat, p.lng]);
-                      setSelected(p);
-                      setActiveMarker({ pothole: p, latlng: { lat: p.lat, lng: p.lng } });
-                      setCardPixel({ x: point.x, y: point.y });
+                    click() {
+                      handleMarkerClick(p);
                     }
                   }}
                 />

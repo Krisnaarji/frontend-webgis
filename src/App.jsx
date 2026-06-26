@@ -488,27 +488,22 @@ export default function App() {
   useEffect(() => {
     const fetchBoundary = async () => {
       try {
-        const response = await fetch('https://nominatim.openstreetmap.org/search?city=Denpasar&state=Bali&country=Indonesia&format=json&polygon_geojson=1&polygon_threshold=0.005');
+        const response = await fetch('/denpasar.json');
         const data = await response.json();
-        
-        if (data && data.length > 0) {
-          const boundaryFeature = {
+        if (data && data.length > 0 && data[0].geojson) {
+          setDenpasarBoundary({
             type: "FeatureCollection",
-            features: [
-              {
-                type: "Feature",
-                properties: { name: "Kota Denpasar" },
-                geometry: data[0].geojson 
-              }
-            ]
-          };
-          setDenpasarBoundary(boundaryFeature);
+            features: [{
+              type: "Feature",
+              properties: { name: "Kota Denpasar" },
+              geometry: data[0].geojson
+            }]
+          });
         }
       } catch (err) {
-        console.error("Gagal mengambil batas wilayah Denpasar:", err);
+        console.error("Gagal mengambil batas wilayah:", err);
       }
     };
-
     fetchBoundary();
   }, []);
 

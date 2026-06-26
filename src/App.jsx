@@ -488,7 +488,7 @@ export default function App() {
   useEffect(() => {
     const fetchBoundary = async () => {
       try {
-        const response = await fetch('https://nominatim.openstreetmap.org/search?city=Denpasar&state=Bali&country=Indonesia&format=json&polygon_geojson=1');
+        const response = await fetch('https://nominatim.openstreetmap.org/search?city=Denpasar&state=Bali&country=Indonesia&format=json&polygon_geojson=1&polygon_threshold=0.005');
         const data = await response.json();
         
         if (data && data.length > 0) {

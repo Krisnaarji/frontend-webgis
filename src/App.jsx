@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { MapContainer, TileLayer, CircleMarker, useMap, useMapEvents, GeoJSON } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 
-const API_BASE = 'http://100.89.123.21:5000';
+const API_BASE = '';
 
 const DENPASAR_BOUNDS = [
   [-8.72, 115.14],
